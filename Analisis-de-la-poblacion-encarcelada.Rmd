@@ -1,0 +1,288 @@
+---
+title: "Analisis de la poblacion encarcelada"
+output: html_document
+date: "2023-03-04"
+---
+
+Fuente: http://datos.jus.gob.ar/dataset/sneep
+
+## Carga de librerias
+```{r}
+library(ggplot2)
+library(knitr)
+```
+
+## Limpieza de base de datos
+```{r}
+df = read.csv("C:/Users/kevin/OneDrive/Escritorio/Labo de datos/sneep-2021.csv")
+
+df = df[,c(-1, -2, -4, seq(-7, -25, -2), seq(-29, -41, -2), -44, -47, seq(-50, -58, -2), -61, seq(-67, -75, -2), seq(-78, -82, -2), -85, -86)]
+
+colnames(df) = c("provincia", "establecimiento", "edad", "genero", "nacionalidad", "estado_civil", "nivel_instruccion", "ultima_situacion_laboral", "capacitacion_laboral_al_ingresar", "ultimo_lugar_residencia", "ultima_provincia_residencia", "jurisdiccion", "situacion_legal", "fecha_detencion", "fecha_condenado", "establecimiento_procedencia", "delito1", "delito2", "delito3", "delito4", "delito5", "horas_trabajo_remunerado", "participacion_programa_laboral", "participacion_programa_educativo", "participacion_actividades_deportivas", "recibio_atencion_medica_ult_anio", "recibio_visitas_ult_anio", "participo_alteracion_orden_ult_anio", "tipo_infraccion_disciplinaria", "sancion_aplicada", "calificacion_conducta", "tentativa_fugas_evasiones", "tentativa_suicidio", "fue_lesionado", "duracion_condena_anios", "duracion_condena_meses", "duracion_condena_rango", "tipo_condena", "es_reincidente", "tiene_periodo_progresividad", "reparticion", "tuvo_salidas_transitorias", "incorporado_reg_semi_libertad", "participa_programa_pre_libertad", "participa_programa_pricion_discontinua", "participa_programa_semi_detencion", "tuvo_reduccion_pena", "mujer_tiene_hijos_intramuro")
+
+df$provincia = as.factor(df$provincia)
+df$genero = as.factor(df$genero)
+df$nacionalidad = as.factor(df$nacionalidad)
+df$estado_civil = as.factor(df$estado_civil)
+df$nivel_instruccion = as.factor(df$nivel_instruccion)
+df$ultima_situacion_laboral = as.factor(df$ultima_situacion_laboral)
+df$capacitacion_laboral_al_ingresar = as.factor(df$capacitacion_laboral_al_ingresar)
+df$ultimo_lugar_residencia = as.factor(df$ultimo_lugar_residencia)
+df$ultima_provincia_residencia = as.factor(df$ultima_provincia_residencia)
+df$situacion_legal = as.factor(df$situacion_legal)
+df$fecha_detencion = as.Date(df$fecha_detencion, "%Y-%m-%d")
+df$fecha_condenado = as.Date(df$fecha_condenado, "%Y-%m-%d")
+df$horas_trabajo_remunerado = as.factor(df$horas_trabajo_remunerado)
+df$participacion_programa_laboral = as.factor(df$participacion_programa_laboral)
+df$participacion_programa_educativo = as.factor(df$participacion_programa_educativo)
+df$participacion_actividades_deportivas = as.factor(df$participacion_actividades_deportivas)
+df$recibio_atencion_medica_ult_anio = as.factor(df$recibio_atencion_medica_ult_anio)
+df$recibio_visitas_ult_anio = as.factor(df$recibio_visitas_ult_anio)
+df$participo_alteracion_orden_ult_anio = as.factor(df$participo_alteracion_orden_ult_anio)
+df$tipo_infraccion_disciplinaria = as.factor(df$tipo_infraccion_disciplinaria)
+df$sancion_aplicada = as.factor(df$sancion_aplicada)
+df$calificacion_conducta = as.factor(df$calificacion_conducta)
+df$tentativa_fugas_evasiones = as.factor(df$tentativa_fugas_evasiones)
+df$tentativa_suicidio = as.factor(df$tentativa_suicidio)
+df$fue_lesionado = as.factor(df$fue_lesionado)
+df$tipo_condena = as.factor(df$tipo_condena)
+df$es_reincidente = as.factor(df$es_reincidente)
+df$tiene_periodo_progresividad = as.factor(df$tiene_periodo_progresividad)
+df$reparticion = as.factor(df$reparticion)
+df$tuvo_salidas_transitorias = as.factor(df$tuvo_salidas_transitorias)
+df$incorporado_reg_semi_libertad = as.factor(df$incorporado_reg_semi_libertad)
+df$participa_programa_pre_libertad = as.factor(df$participa_programa_pre_libertad)
+df$participa_programa_pricion_discontinua = as.factor(df$participa_programa_pricion_discontinua)
+df$participa_programa_semi_detencion = as.factor(df$participa_programa_semi_detencion)
+df$tuvo_reduccion_pena = as.factor(df$tuvo_reduccion_pena)
+df$mujer_tiene_hijos_intramuro = as.factor(df$mujer_tiene_hijos_intramuro)
+df$delito1 = as.factor(df$delito1)
+df$delito2 = as.factor(df$delito2)
+df$delito3 = as.factor(df$delito3)
+df$delito4 = as.factor(df$delito4)
+df$delito5 = as.factor(df$delito5)
+
+df = df[df$edad > 0,]
+
+df = cbind(df, as.numeric(df$fecha_condenado-df$fecha_detencion))
+colnames(df)[49] = c("tiempo_detenido")
+
+df = cbind(df, as.numeric(df$duracion_condena_anios + df$duracion_condena_meses / 12))
+colnames(df)[50] = c("duracion_condena_total")
+
+levels(df$delito1)[11] = "Delitos contra la seguridad de la nacion"
+levels(df$delito2)[11] = "Delitos contra la seguridad de la nacion"
+levels(df$delito3)[10] = "Delitos contra la seguridad de la nacion"
+levels(df$delito4)[10] = "Delitos contra la seguridad de la nacion"
+levels(df$delito4)[7] = "Delitos contra la seguridad de la nacion"
+
+tipo_delito = function(delito) {
+  if (delito == "Homicidios dolosos") { return("DELITOS CONTRA LAS PERSONAS") }
+  else if (delito == "Robo y/o tentativa de robo") { return("DELITOS CONTRA LA PROPIEDAD") }
+    else if (delito == "Lesiones Dolosas") { return("DELITOS CONTRA LAS PERSONAS") }
+    else if (delito == "Delitos contra la seguridad pública") { return("OTROS") }
+    else if (delito == "Otros delitos contra la libertad") { return("DELITOS CONTRA LA LIBERTAD") }
+    else if (delito == "Violaciones/Abuso sexual") { return("DELITOS CONTRA LA INTEGRIDAD SEXUAL") }
+    else if (delito == "Amenazas") { return("DELITOS CONTRA LA LIBERTAD") }
+    else if (delito == "Otros delitos contra las personas") { return("DELITOS CONTRA LAS PERSONAS") }
+    else if (delito == "Otros delitos contra la propiedad") { return("DELITOS CONTRA LA PROPIEDAD") }
+    else if (delito == "Homicidios dolosos (tent.)") { return("DELITOS CONTRA LAS PERSONAS") }
+    else if (delito == "Homicidios Culposos") { return("DELITOS CONTRA LAS PERSONAS") }
+    else if (delito == "Infracción ley n° 23.737 (estupefacientes)") { return("OTROS") }
+    else if (delito == "Delitos contra el honor") { return("OTROS") }
+    else if (delito == "Otros delitos contra la integridad sexual") { return("DELITOS CONTRA LA INTEGRIDAD SEXUAL") }
+    else if (delito == "Hurto y/o tentativa de hurto") { return("DELITOS CONTRA LA PROPIEDAD") }
+    else if (delito == "Delitos previstos en leyes especiales") { return("OTROS") }
+    else if (delito == "Delitos c/ la administracion pública") { return("OTROS") }
+    else if (delito == "Lesiones Culposas") { return("DELITOS CONTRA LAS PERSONAS") }
+    else if (delito == "Delitos c/el orden público") { return("OTROS") }
+    else if (delito == "Delitos c/ el estado civil") { return("OTROS") }
+    else if (delito == "Privación ilegítima de la libertad") { return("DELITOS CONTRA LA LIBERTAD") }
+    else if (delito == "Delitos c/ la fe pública") { return("OTROS") }
+    else if (delito == "Infraccion ley n° 24.769 penal tributaria") { return("OTROS") }
+    else if (delito == "Del. contra la lib. comet. por func. público") { return("DELITOS CONTRA LA LIBERTAD") }
+    else if (delito == "Infraccion ley n° 13.944 incumplimiento de deberes") { return("OTROS") }
+    else if (delito == "Contravenciones") { return("OTROS") }
+    else if (delito == "Lesa Humanidad") { return("OTROS") }
+    else if (delito == "Delitos contra la seguridad de la nacion") { return("OTROS") }
+    else if (delito == "Contrabando de estupefacientes") { return("OTROS") }
+    else if (delito == "Delitos contra los poderes publicos") { return("OTROS") }
+  return("")
+}
+tipo_delitos = function(delitos) {
+
+  tipos = rep(NA, length(delitos))
+  for (i in 1:length(delitos)) {
+    tipos[i] = tipo_delito(delitos[i])
+  }
+
+  return(tipos)
+}
+
+df = cbind(df, tipo_delitos(df$delito1))
+colnames(df)[51] = c("tipo_delito")
+df$tipo_delito = as.factor(df$tipo_delito)
+
+dim(df)
+
+knitr::kable(head(df,10))
+```
+
+## Algunos analisis descriptivos para tener en cuenta en el modelado
+
+```{r, collapse=TRUE}
+df2 = df[df$duracion_condena_total > 0 & df$delito1 != "",]
+
+ggplot(df2, aes(duracion_condena_total)) +
+  geom_histogram(binwidth = 1, col='black', fill='green', alpha=0.4) +
+  labs(title="", x= "Duracion de condena", y= "")
+  
+ggplot(df2, aes(edad)) +
+  geom_histogram(binwidth = 2, col='black', fill='green', alpha=0.4) +
+  labs(title="", x= "Edad", y= "")
+
+ggplot(as.data.frame(table(df2$delito1)), aes(Freq, Var1)) +
+  geom_bar(stat = "identity") +
+  labs(title="Frecuencia segun delito", x= "", y= "")
+
+ggplot(df2, aes(duracion_condena_total, delito1)) +
+  geom_boxplot(outlier.shape = NA) +
+  coord_cartesian(xlim = c(0, 30)) +
+  labs(title="Duracion de condena segun delito", x= "", y= "")
+
+ggplot(df2, aes(edad, delito1)) +
+  geom_boxplot(outlier.shape = NA) +
+  coord_cartesian(xlim = c(15, 75)) +
+  labs(title="Edad segun delito", x= "", y= "")
+
+ggplot(as.data.frame(table(df2$tipo_delito)), aes(Freq, Var1)) +
+  geom_bar(stat = "identity") +
+  labs(title="Frecuencia segun tipo de delito", x= "", y= "")
+
+ggplot(df2, aes(duracion_condena_total, tipo_delito)) +
+  geom_boxplot(outlier.shape = NA) +
+  coord_cartesian(xlim = c(0, 30)) +
+  labs(title="Duracion de condena segun tipo de delito", x= "", y= "")
+
+ggplot(df2, aes(edad, tipo_delito)) +
+  geom_boxplot(outlier.shape = NA) +
+  coord_cartesian(xlim = c(15, 75)) +
+  labs(title="Edad segun tipo de delito", x= "", y= "")
+
+ggplot(df2, aes(duracion_condena_total, edad)) +
+  geom_point(shape = 16, size = 0.5, show.legend = FALSE,alpha=0.4) +
+  geom_smooth(method = "lm") +
+  stat_density2d(geom = "polygon",alpha=0.2) +
+  labs(title="", x= "Duracion de condena", y= "Edad")
+
+#Estos son los menos interesantes
+ggplot(df2, aes(duracion_condena_total, genero)) +
+  geom_boxplot(outlier.shape = NA) +
+  coord_cartesian(xlim = c(0, 30)) +
+  labs(title="Duracion de condena segun genero", x= "", y= "")
+
+ggplot(df2, aes(duracion_condena_total, nivel_instruccion)) +
+  geom_boxplot(outlier.shape = NA) +
+  coord_cartesian(xlim = c(0, 30)) +
+  labs(title="Duracion de condena segun nivel de instruccion", x= "", y= "")
+
+```
+
+
+```{r, echo=FALSE}
+#si size_group es 0 entonces se trata de LOOCV
+cross_validation = function(df, size_group) {
+  
+  i = 1
+  predichos = rep(NA, nrow(df))
+
+  while (i + size_group < nrow(df)) {
+    ajus = lm(duracion_condena_total ~ delito1 + edad, df[-i:-i-size_group,])
+    
+    j = i
+    while (j < i+size_group) {
+      #trycatch necesario porque se tratan de variables categoricas que pueden fallar (por ejemplo el valor de alguna variable que se quiere predecir no tiene puntaje)
+      tryCatch({
+        predichos[j] = predict(ajus, df[j,])
+      }, error = function(cond) {
+        print("Hubo un error en una prediccion:")
+        print(cond)
+      })
+      j=j+1
+    }
+    
+    i = i + size_group
+  }
+  
+  ajus = lm(duracion_condena_total ~ delito1 + edad, df[-i:-nrow(df),])
+  for (j in i:nrow(df)) {
+    tryCatch({
+      predichos[j] = predict(ajus, df[j,])
+    }, error = function(cond) {
+      print("Hubo un error en una prediccion:")
+      print(cond)
+    })
+  }
+  
+  mae = mean(abs(df$duracion_condena_total-predichos), na.rm=TRUE)
+  pmae = mean(abs(df$duracion_condena_total-predichos), na.rm=TRUE)/mean(df$duracion_condena_total)
+  
+  return(list("mae" = mae, "pmae" = pmae))
+}
+```
+
+
+## Modelo predictivo de toda la poblacion
+Tarda un rato en generar las muestras. Tiene muchas observaciones.
+
+```{r}
+all_model = cross_validation(df2, 5100)
+paste('MAE:',all_model$mae,'PMAE:',all_model$pmae,sep = " ")
+```
+
+## Modelo predictivo con la poblacion de mujeres
+
+```{r}
+dfMujeres = df[df$duracion_condena_total > 0 & df$delito1 != "" & df$genero == "Mujer",]
+
+mujeres_model = cross_validation(dfMujeres, 175)
+paste('MAE:',mujeres_model$mae,'PMAE:',mujeres_model$pmae,sep = " ")
+```
+
+```{r, echo=FALSE}
+#Dejo funcion de bootstrap por si es necesaria
+
+# B: cantidad de muestras bootstrap
+# n: cantidad de observaciones por muestra
+bootstrap = function(df, B, n) {
+  set.seed(1)
+
+  N<-nrow(df) # cantidad de observaciones del dataset
+
+  model = lm(duracion_condena_total ~ delito1 + delito2 + delito3 + delito4 +
+               delito5 + edad, df)
+
+  coefs = data.frame(coef(model)) # coeficientes de cada muestra
+
+  for (b in 1:B) {
+    indices<-sample(1:N,n,replace = TRUE)
+
+    #trycatch necesario porque se tratan de variables categoricas que pueden fallar (por ejemplo el valor de alguna variableque se quiere predecir no tiene puntaje)
+    tryCatch({
+        ajus = lm(duracion_condena_total ~ delito1 + delito2 + delito3 +
+                    delito4 + delito5 + edad, df[indices,])
+        coefs = merge(coefs,coef(ajus),by="row.names",all.x=TRUE)
+        rownames(coefs) = coefs$Row.names
+        coefs = coefs[-1]
+        colnames(coefs) = 1:ncol(coefs)
+    })
+  }
+  
+  model$coefficients = rowMeans(coefs, na.rm=TRUE)
+  
+  mae = mean(abs(df$duracion_condena_total-predict(model)))
+  pmae = mean(abs(df$duracion_condena_total-predict(model)))/mean(df$duracion_condena_total)
+  
+  return(list("model" = model, "mae" = mae, "pmae" = pmae))
+}
+```
