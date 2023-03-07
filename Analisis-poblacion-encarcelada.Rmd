@@ -1,6 +1,13 @@
 ---
-title: "Analisis de la poblacion encarcelada"
-output: html_document
+title: "Analisis poblacion encarcelada"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+  html_notebook:
+    theme: lumen
+    toc: yes
+    toc_float: yes
 date: "2023-03-04"
 ---
 
@@ -9,12 +16,11 @@ Fuente: http://datos.jus.gob.ar/dataset/sneep
 ## Carga de librerias
 ```{r}
 library(ggplot2)
-library(knitr)
 ```
 
 ## Limpieza de base de datos
 ```{r}
-df = read.csv("C:/Users/kevin/OneDrive/Escritorio/Labo de datos/sneep-2021.csv")
+df = read.csv("C:/Program Files/Go/src/github.com/KevinSabetay3345/Analisis-de-la-poblacion-encarcelada/sneep-2021.csv")
 
 df = df[,c(-1, -2, -4, seq(-7, -25, -2), seq(-29, -41, -2), -44, -47, seq(-50, -58, -2), -61, seq(-67, -75, -2), seq(-78, -82, -2), -85, -86)]
 
@@ -125,7 +131,7 @@ df$tipo_delito = as.factor(df$tipo_delito)
 
 dim(df)
 
-knitr::kable(head(df,10))
+head(df, 10)
 ```
 
 ## Algunos analisis descriptivos para tener en cuenta en el modelado
@@ -136,7 +142,7 @@ df2 = df[df$duracion_condena_total > 0 & df$delito1 != "",]
 ggplot(df2, aes(duracion_condena_total)) +
   geom_histogram(binwidth = 1, col='black', fill='green', alpha=0.4) +
   labs(title="", x= "Duracion de condena", y= "")
-  
+
 ggplot(df2, aes(edad)) +
   geom_histogram(binwidth = 2, col='black', fill='green', alpha=0.4) +
   labs(title="", x= "Edad", y= "")
@@ -192,13 +198,13 @@ ggplot(df2, aes(duracion_condena_total, nivel_instruccion)) +
 ```{r, echo=FALSE}
 #si size_group es 0 entonces se trata de LOOCV
 cross_validation = function(df, size_group) {
-  
+
   i = 1
   predichos = rep(NA, nrow(df))
 
   while (i + size_group < nrow(df)) {
-    ajus = lm(duracion_condena_total ~ delito1 + edad, df[-i:-i-size_group,])
-    
+    ajus = lm(duracion_condena_total ~ delito1 + es_reincidente + genero + nacionalidad + nivel_instruccion, df[-i:-i-size_group,])
+
     j = i
     while (j < i+size_group) {
       #trycatch necesario porque se tratan de variables categoricas que pueden fallar (por ejemplo el valor de alguna variable que se quiere predecir no tiene puntaje)
@@ -210,11 +216,11 @@ cross_validation = function(df, size_group) {
       })
       j=j+1
     }
-    
+
     i = i + size_group
   }
-  
-  ajus = lm(duracion_condena_total ~ delito1 + edad, df[-i:-nrow(df),])
+
+  ajus = lm(duracion_condena_total ~ delito1 + es_reincidente + genero + nacionalidad + nivel_instruccion, df[-i:-nrow(df),])
   for (j in i:nrow(df)) {
     tryCatch({
       predichos[j] = predict(ajus, df[j,])
@@ -223,31 +229,41 @@ cross_validation = function(df, size_group) {
       print(cond)
     })
   }
-  
+
   mae = mean(abs(df$duracion_condena_total-predichos), na.rm=TRUE)
   pmae = mean(abs(df$duracion_condena_total-predichos), na.rm=TRUE)/mean(df$duracion_condena_total)
-  
+
   return(list("mae" = mae, "pmae" = pmae))
 }
 ```
 
 
-## Modelo predictivo de toda la poblacion
+## Modelo predictivo
+
+duracion_condena_total = a1 + a2 * delito1 + a3 * es_reincidente + a4* genero + a5 * nacionalidad + a6 * nivel_instruccion
+
 Tarda un rato en generar las muestras. Tiene muchas observaciones.
 
 ```{r}
-all_model = cross_validation(df2, 5100)
-paste('MAE:',all_model$mae,'PMAE:',all_model$pmae,sep = " ")
+df_modelo = df[df$duracion_condena_total > 0 & df$delito1 != "" & df$delito2 == "" & df$delito3 == "" & df$delito4 == "" & df$delito5== "",]
+
+model = cross_validation(df_modelo, 3900)
+paste('MAE:',model$mae,'PMAE:',model$pmae,sep = " ")
 ```
 
-## Modelo predictivo con la poblacion de mujeres
+## Clasificacion
 
 ```{r}
-dfMujeres = df[df$duracion_condena_total > 0 & df$delito1 != "" & df$genero == "Mujer",]
 
-mujeres_model = cross_validation(dfMujeres, 175)
-paste('MAE:',mujeres_model$mae,'PMAE:',mujeres_model$pmae,sep = " ")
+#perpetua = delito1, es_reincidente
+
+#tuvo_reduccion_pena_binario (hacer variable nueva) = calificacion_conducta, participacion_programa_laboral, participacion_programa_educativo, participacion_actividades_deportivas, , participacion_alteracion_order_ult_anio, tentativa_fugas_evasiones
+
+#tentativa_suicidio = edad, tiempo_condena, fue_lesionado, recibio_visitas_ult_anio, tiene periodo de progresividad (chequear)
+
 ```
+
+
 
 ```{r, echo=FALSE}
 #Dejo funcion de bootstrap por si es necesaria
@@ -269,20 +285,20 @@ bootstrap = function(df, B, n) {
 
     #trycatch necesario porque se tratan de variables categoricas que pueden fallar (por ejemplo el valor de alguna variableque se quiere predecir no tiene puntaje)
     tryCatch({
-        ajus = lm(duracion_condena_total ~ delito1 + delito2 + delito3 +
-                    delito4 + delito5 + edad, df[indices,])
-        coefs = merge(coefs,coef(ajus),by="row.names",all.x=TRUE)
-        rownames(coefs) = coefs$Row.names
-        coefs = coefs[-1]
-        colnames(coefs) = 1:ncol(coefs)
+      ajus = lm(duracion_condena_total ~ delito1 + delito2 + delito3 +
+                  delito4 + delito5 + edad, df[indices,])
+      coefs = merge(coefs,coef(ajus),by="row.names",all.x=TRUE)
+      rownames(coefs) = coefs$Row.names
+      coefs = coefs[-1]
+      colnames(coefs) = 1:ncol(coefs)
     })
   }
-  
+
   model$coefficients = rowMeans(coefs, na.rm=TRUE)
-  
+
   mae = mean(abs(df$duracion_condena_total-predict(model)))
   pmae = mean(abs(df$duracion_condena_total-predict(model)))/mean(df$duracion_condena_total)
-  
+
   return(list("model" = model, "mae" = mae, "pmae" = pmae))
 }
 ```
